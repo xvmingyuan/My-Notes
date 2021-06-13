@@ -1,0 +1,730 @@
+一、Redis初始：单机安装部署（版本选择），边界（使用场景）
+ 介绍：
+ 	redis-server: 服务器
+		远程访问：注释掉 bind 127.0.0.1,
+			修改：protected-mode no
+	redis-cli: 命令客户端
+		查询服务器信息：info
+		用法：redis-cli [OPTIONS] [cmd [arg [arg ...]]]
+		-h <主机ip>，默认是127.0.0.1
+		-p <端口>，默认是6379
+		-a <密码>，如果redis加锁，需要传递密码
+		--help，显示帮助信息
+    		例子：redis-cli -h 192.168.1.103 -p 6379 -a 123455
+	redis-benchmarik: 性能测试工具
+	redis-check-aof: AOF文件修复工具（断电修复工具）
+	redis-check-dump: RDB文件检测工具 断电修复工具）
+	redis-sentinel: Sentinel服务器（2.8以后）
+ redis性能
+        下面是官方的bench-mark数据：
+        测试完成了50个并发执行100000个请求。
+        设置和获取的值是一个256字节字符串。
+        Linux box是运行Linux 2.6,这是X3320 Xeon 2.5 ghz。
+        文本执行使用loopback接口(127.0.0.1)。
+        结果:读的速度是110000次/s,写的速度是81000次/s 。
+ 启动方式：
+	最简启动:	
+	动态参数启动:
+	配置文件启动（推荐）:
+ 验证：
+	ps -ef | grep redis
+	netstat -antpl | grep redis
+	redis-cli -h ip -p port ping
+ 动态参数启动：
+	redis-server —-port 6380
+ 配置启动：
+	redis-server configPath
+ 常用配置：
+	daemonize 是否是守护线程（yes|noe）
+	port 对外端口
+	logfile 系统日志
+	dir 工作目录
+
+ 复制 redis.conf 并去不掉# 和空格的行：
+ cat redis.conf | grep -v '#' | grep -v '^$' > ./config/redis.conf
+ 查看 redis服务：
+ ps -ef | grep redis-server | grep -v grep
+ 命令：set hello world  / get hello / del hello
+二、Redis API理解使用:单线程,5种数据结构的使用和选择.
+	keys:遍历所有的key（生产环境慎用，因为keys*是全盘扫描，数据庞大耗时，因单线程会阻塞）
+	 eg:	keys * :	
+	dbsize:计算key的总数
+	 eg:
+	exists key:
+	del key[key...]:
+	expire key seconds:
+	type key:
+	info:查看Redis信息
+	flushdb：清空当前数据库中的所有 key
+	flushall：清除所有库所有key数据
+
+ string(字符串):
+	get key 		o(1)
+	set key value		o(1)
+	del key			o(1)
+	incr key 自增1		o(1)
+	decr key 自减1		o(1)
+	incrby key k 自增k	o(1)
+	decr key k 自减k		o(1)
+	
+	set setnx setxx区别
+	set key value：key是否存在，都设置		o(1)
+	setnx key value：key不存在，才设置		o(1)
+	set key value xx：key存在，才设置		o(1)
+	
+	mget key1 key2 key3		o(n)	
+	mset k1 v1 k2 v2 k3 v3		o(n)
+	getset key newvalue: set key new并返回 旧的value 	o(1)
+	append key value：将value追加到旧的value		o(1)
+	strlen key：返回字符串的长度（注意中文）		o(1)
+	incrbyfloat key 3.5: 增加key对应值3.5		o(1)
+	getrange key start end: 获取字符串指定下标所有的值	o(1)
+	setrange key index value:设置指定下标所有对应的值	o(1)
+ hash(哈希):
+	hget key field(字段）			o(1)
+	hset key field value			o(1)
+	hdel key field
+	hexists key field：判断 key是否有field	o(1)
+	hlen key：获取field数量			o(1)
+	hmget key field1 field2..fieldN:批量获取一批field的值	o(n)
+	hmset key f1 v1 f2 v2 f3 v3				o(n)
+	hgetall key:返回所有field和value				o(n)
+	hvals key:返回key对应的所有field的value			o(n)
+	hkeys key:返回key对应的所有field				o(n)
+	hsetnx key field value:设置key field的value，若field存在，失败	o(1)
+	hincrby key field inCounter:对应field的value自增inCounter		o(1)
+	hincrbyfloat key field floatCounter：hincrby浮点数版		o(1)
+ list(数组):
+	rpush key v1 v2 … vn		o(1~n)
+	lpush key v1 v2 … vn		o(1~n)
+	linset key before|after value newValue：在list指定的值前|后插入newValue 	o(n)
+	lpop key：从列表左侧弹出一个item	o(1)
+	rpop key：从列表右侧弹出一个item	o(1)
+
+	lrem key count value:根据count值，从列表中删除所有value相等的项		o(n)
+		（1）count >0:从左到右，删除最多count个value相等的项
+		（2）count =0:删除所有value相等的项
+		（3）count <0:从右到左，删除最多Math.abs(count)个value相等的项
+	ltrim key start end:按索引范围修剪列表（只保留索引[包含]范围内的项）		o(n)
+	lrange key start end(包含end):获取列表指定索引范围所有item			o(n)
+	lindex key index：获取列表指定索引的item					o(n)
+	llen key：获取list长度							o(1)
+	lset key index newValue：指定索引位置为newValue				o(n)
+	blpop key timeout：左侧弹出一个item，lpop阻塞版本，timeout=0 永远不阻塞		o(1)
+	brpop key timeout：右侧弹出一个item，rpop阻塞版本，timeout=0 永远不阻塞		o(1)
+	
+	lpush+lpop = Stack（栈）
+	lpush+rpop = queue（队列）
+	lpush+ltrim = Capped Collection（固定集合）
+	lpush+brpop = Message Queue(消息队列）
+	
+ set(集合):
+ 	sadd key element	o(1)
+	srem key element	o(1)
+	scard key：计算集合大小
+	sismember key element：判断element是否在集合中
+	srandmember key count=num：从集合中随机挑count个元素
+	spop key ：从集合中随机弹出一个元素
+	smembers key ：获取集合所有元素
+
+	sdiff key1 key2: 差集
+	sinter key1 key2: 交集
+	sunion key1 key2: 并集
+	sdiff|sinter|suion + store destkey:将差集，交集，并集结果保存在destkey中
+
+	sadd = tagging （标签）
+	spop/srandmember = random item （随机数）
+	sadd + sinter = Social Graph （社交图）
+	
+ zset(有序集合）:
+	zadd key score element（可以是多对）：添加		o(logN)
+	zrem key element(可以是多个）			o(1)
+	zscore key element:返回分数			o(1)
+	zincrby key increScore element:增加或减少元素的分数
+	zcard key:返回元素的总个数
+	zrange key start end[withscores]:返回指定索引范围内的升序元素[分值]	o(log(n)+m)
+	zrangebyscore key minScore maxScore[withscores]：返回指定分时范围内的升序元素[分值] o(log(n)+m)
+	zcount key minScore maxScore:返回有序集合内指定分数范围内的个数
+	zremrangebyrank key start end：删除指定排名内的升序元素
+	zremrangebyscore key minScore maxScore：删除指定分数内的升序元素
+
+	zrevrank ：根据取值范围，低到高排名
+	zrevrange ：根据取值范围，高到低排名
+	zrevrangebyscore key maxScore minScore：根据分数，高到低排名
+	zinterstore ：交集
+	zunionstore ：并集
+	
+
+三、Redis客户端：jedis、redis-py等客户端
+	Java Jedis客户端（单机）/ ReXXXXXXX（分布式）
+	Python 
+	
+四、Redis瑞士军刀（多功能应用）
+	慢查询：先进先出队列，固定长度，保存在内存，阈值（单位：微秒）
+		配置: slowlog-log-slower-than = 0，记录所有命令
+		     slowlog-log-slower-than < 0,不记录任何命令
+		config get slowlog-max-len = 128
+		config get slowlog-log-slower-than = 10000
+		运维经验：slowlog-max-len 不要设置过大，默认10ms，通常设置1ms
+			slowlog-log-slower-than 不要设置过小，通常设置1000左右
+			理解命令生命周期
+			定期持久化慢查询
+		
+	pipeline（管道）：pipeline之间是非原子操作，批量操作执行命令，减少网络请求次数和开销，pipeline内有顺序
+	
+	发布订阅：
+		
+	Bitmap：位图，通过操作二进制位来修改数据，效率更高，需要的内存量更小
+		setbit key offset value:给位图指定索引设置值
+		getbit key offset:获取位图指定索引的值
+		bitcount key[start end]:获取位图指定范围（start-end，单位字节，如果不指定就是获取全部）位值为1的个数
+		bitop op destkey key[key…]:做多个Bitmap的and、or、not(非)、xor(异或)操作并将结果保存在destkey中
+		bitpos key targetBit[start][end]:计算位图指定范围（start-end，单位字节，如果不指定就是获取全部）第一个
+						偏移量对应的值等于targetBit的位置
+		应用：独立用户统计，中级用户数量使用，低级可以用set
+		使用经验：type=string,最大512M
+			注意setbit时的偏移量，可能有较大耗时（redis是单线程）
+			位图不是绝对好
+	HyperLongLog：基于HyperLongLog算法，极小空间完成独立数量统计
+		pfadd key element[element]:向hyperlonglog添加元素
+		pfcount key[key…]:计算hyperloglog的独立总数
+		pfmerge destkey sourcekey[sourcekey…]:合并多个hyperlonglog
+		eg: 
+		    pfadd 2018_06_17:u:ids “u1” “u2” “u3” “u4”
+		    pfcount 2018_06_17:u:ids
+		    pfmerge 2018_06_17:u:ids 2018_06_17_bak:u:ids
+		应用：百万独立用户
+		缺点：错误率：0.81%，无法取用户ID
+		
+	GEO：用于计算地理位置信息，两地距离，范围计算（周围酒店，地铁，餐馆）等
+		geoadd key longitude latitude member[longitude latitude member…]:添加地理位置信息
+		  eg: geoadd cities:locations 116.28 39.55 beijing
+
+		geopos key member[member…]:获取地理位置信息
+		  eg：geopos cities:loactions beijing
+
+		geodist key member1 member2[unit]:获取两个地理位置的距离 #unit:m、km、mi(英里)、ft(尺)
+		  eg: geodist cities:loactions beijing tianjin km
+
+		georadius key longitude latitude radius|km|ft|mi [withcoord][withdist][withhash][COUNT
+			count][asc|desc][store key][storedist key]:获取指定位置范围内的地理位置信息
+		  withcoord:返回结果中包含经纬度
+		  withdist:返回结果中包含距离中心节点位置		
+		  withhash返回结果中包含geohash
+		  COUNT count:指定返回结果的数量
+		  asc|desc:返回结果中包含
+		  store key:将返回结果的位置信息保存到指定键
+		  storedist key:将返回结果距离中心节点的距离保存到指定键
+		  eg: georadiusbymember cities:loactions beijing 150km
+		提示：since 3.2+ , type geoKey = zset, 没有删除API：zrem key member
+
+五、Redis持久化：RDB和AOF的优缺点和最佳实践
+	RDB:将Redis内存中的数据完整的生成一个快照，保存到.rdb文件中,Redis加载.rdb文件恢复某时间的内存
+	    rdb相当于一份备份文件
+		save（同步）：单线程，阻塞命令，会影响在线客户端响应时间
+			文件策略：如存在老的RDB文件，新替换老
+			复杂度：o(n)
+		
+		bgsave（异步）：利用Linux 的fork() 函数fast一个子进程完成RDB的生成，生成并返回
+				bgsave successfully/error 给主进程消息
+			fork:在大多数情况下是非常快的，但是也会阻塞redis客户端命令
+			文件策略和复杂度与save相同
+
+		save与bgsave比较：
+			命令		save		bgsave
+			IO类型		sync		async
+			阻塞		yes		yes（阻塞发生在fork）
+			复杂度		o(n)		o(n)
+			优点		不会消耗额外内存	不会‘阻塞’客户端命令
+			缺点		阻塞客户端命令	需要fork，消耗额外内存
+
+		自动：save seconds changes（save 900 1）900秒钟 改变了1条 执行save
+		配置参数解析：
+			dbfilename dump-${port}.rdb:rdb文件区分
+			dir /bigdiskpath:选择盘路径
+			stop-writes-on-bgsave-error yes:bgsave发送错误是否停止写入
+			rdbcompression yes:压缩格式选择
+			rdbchecksum yes:是否采用校验和
+		RDB总结：
+			1.RBD是Redis内存到硬盘的快照，用于持久化
+			2.save通常会阻塞Redis
+			3.bgsave不会阻塞Redis，但是会fork新进场
+			4.save自动配置满足任一条件就会被执行：推荐不适用
+			5.有些触发save机制不容忽视，如：全量（主从）复制，debug reload，shutdown
+		问题：
+			耗时: 是个o(n)操作，数据量大非常耗时
+			耗性能：fork()消耗内存，copy-on-write策略 
+			      Disk I/O：IO性能
+			不可控，容易丢失数据：RDB创建，执行命令，宕机，创建->宕机之间数据丢失
+		
+	AOF：类似日志文件，实时数据恢复
+		always:总是把缓冲区fsync硬盘AOF文件中。IO开销大
+		everysec:每秒把缓冲区fsync硬盘AOF文件中。宕机会丢失一秒数据
+		no:不用管，由系统控制。不可控
+		AOF重写：把过期，重复，没用的，可优化的命令化简一个很小的AOF文件，从而达到减少硬盘占用，加速恢复速度
+			例如：计数服务，达到了一亿，只需记载一亿即可，不需从0记起
+			bgrewriteaof:Master->fork->子进程->AOF重写（Redis内存内）->AOF文件
+			AOF重写配置:
+				配置
+				auto-aof-rewrite-min-size:文件重写需要的尺寸
+				auto-aof-rewrite-percentage:文件增长率
+				统计：
+				aof_current_size:AOF当前尺寸（字节）
+				aof_base_size:AOF上次启动和重写的尺寸
+			自从触发时机：aof_current_size > auto-aof-rewrite-min-size
+					(aof_current_size-aof_base_size)/aof_base_size > 
+					auto-aof-rewrite-percentage
+		配置参数解析：
+			appendonly yes：开启aof
+			appendfilename “appendonly-${port}.aof ：aof文件区分
+			appendfsync everysec：AOF写入频率
+			dir /bigdiskpath:选择盘路径
+			no-appendfsync-on-rewrite yes: aof重写时是否做aof附加操作，yes:不做（aof失败期间数据丢失）
+			auto-aof-rewrite-min-size:文件重写需要的尺寸
+			auto-aof-rewrite-percentage:文件增长率
+			aof-load-truncated yes: 加载截断的AOF文件
+
+	RDB与AOF比较：
+		命令		RDB		AOF
+		启动优先级		低		高
+		体积		小		大
+		恢复速度		快		慢
+		数据安全性		丢失数据		根据策略决定
+		轻重		重		轻
+		
+		RBD：使用二进制压缩格式，体积小，恢复速度快，使用的是快照概念会丢失数据，
+			全部的redis数据都放到RDB文件，内存数据一次性导入到RDB，数据量大时候占用大量硬盘IO，
+			同时也是CPU密集操作，bgsave还有额外内存开销（fork），所以重
+		AOF：体积是一个日志的形式，虽然有AOF重写，但体积仍较大，根据策略决定，no，always，everysec
+			AOF重写是Redis内部内存开销，同时AOF写入是追加日志操作，对硬盘是较轻操作
+	RDB最佳策略：
+		‘关’：全量复制时，主节点必须需要开启RDB，将数据发送个从节点
+		集中管理：按天或按小时的集中数据备份，可以选择RDB操作，因为RDB文件体积小，短期积累长期文件，RDB优势明显
+		主从，从开：某些场景主从复制，从节点要开RDB，自动生成save但不要太频繁，因为RDB较重影响（对内存，CPU，硬盘）
+   	RDB最佳策略：
+		‘开’：缓存和存储，大部分情况下只会丢1秒数据，可作为大面积数据持久化
+		AOF重写集中管理：在单机多部署，建议分配给Redis 60%-70%内存，剩下给类似fork操作这样的操作，
+				集中fork操作可能导致内存爆满，或系统报异常
+		everysec：每秒刷盘策略
+	最佳策略：
+		小分片：使用maxMemory对Redis内存做规划，设置小内存，产生小开销
+		缓存或者存储：小分片，分布式情况产生更多进程，对CPU占用多，根据存储个缓存选择策略
+		监控（硬盘，内存，负载，网络）：监控系统
+		足够内存：不要把内存布满，像客户端缓冲区，fork都有额外的内存开销。
+		
+	Redis持久化常见问题
+	fork操作：
+		同步操作
+		与内存量息息相关：内存越大，耗时越长（与机器类型有关）
+		info：latest_fork_usec
+	改善fork：
+		优先使用物理机或者高效支持fork操作的虚拟化技术
+		控制Redis实例最大可用内存：maxMemory
+		合理配置Linux内存分配策略：vm.overcommit_memory=1[不阻塞]（默认是0，发现没有足够内存不做分配，使fork阻塞)
+		降低fork频率：例如放宽AOF重写自动触发时机，不必要的全量复制
+	子进程开销和优化：
+		CPU：开销：RDB和AOF文件生成，属于CPU密集型
+			优化：不做CPU绑定，不和CPU密集型应用部署在一起
+		内存：开销：fork内存开销，copy-on-write
+			优化：echo never > /sys/kernel/mm/transparent_hugepage/enabled
+			减少集中大量AOF重写操作
+		硬盘：开销：AOF和RDB文件写入，可以结合iostat，iotop分析
+			no-appendfsync-on-rewrite = yes ：AOF重写期间 不对AOF文件进行追加日志操作，减少内存开销
+			ssd，分盘
+	AOF的缺点
+		对于同一份数据，AOF日志一般比RDB快照更大
+		AOF开启后，写QPS会比RDB的低，因为AOF一般会配置成每s fsync一次日志文件，当然，每s一次fsync，性能也还是很高的
+		以前AOF发生过bug，就是通过AOF记录的日志，进行数据恢复的时候，没有恢复一模一样的数据出来
+		类似AOF这种较为复杂的基于命令日志/merge/回放的方式，比基于RDB的每次持久化一份完整的数据快照方式相比更加脆弱一些，易产生bug
+六、Redis复制：配置方法，全量和部分复制，常见运维问题
+	主从复制：一个master可以有多个slave，一个slave只能有一个master,数据流向是单向的，master到slave
+	 	实现方式：slaveof命令，配置
+		配置: 	slaveof ip prot
+			slave-read-only yes (从节点只读）
+			命令		配置
+			不需要重启		统一配置
+			不便于管理		需要重启
+		常用命令：
+			redis-server redis-5.0.5/config/redis-6379.conf：启动redis server
+			redis-cli -p 6380 shutdown:关闭服务器
+			ps -ef | grep redis：查看redis进程
+			redis-cli -p 6380 slaveof it01 6379 : 将自己设置成 it01:6379 的从节点
+			redis-cli -p 6380 slaveof no one: 脱离it01:6379从节点
+			redis-cli -p 6380 info replication:查看redis启动信息
+			redis-cli -p 6379 info replication
+			redis-cli -p 6381 info replication
+			cat redis-5.0.5/data/6379.log 
+			sed "s/6379/6380/g" redis-6379.conf > redis-6380.conf ：替换AA的6379为6380，输出到BB
+			echo "slaveof it01 7000" >> redis-7001.conf :追加aa到BB文件最后一行 
+		redis-cli下命令
+			info replication：查看redis启动信息
+			slaveof it01 6379 : 在从机器上执行，将自己设置成 it01:6379 的从节点
+		runid:	唯一标识(run_id:b1dda53641e482e0b73f1d7c37c27e5f8e3b9d85)
+			查看命令：redis-cli -p 6379 info server | grep run
+		偏移量(master_repl_offset:3240):写入数据增量计数器，主从数据同步依据标志 
+	全量复制：同步所有数据，数据量大
+		第一次复制:psync ? -1
+		开销：bgsave时间，RDB文件网络传输时间，从节点清空数据时间，从节点加载RDB的时间，可能得AOF重写时间
+		问题：数据较多时，复制过程开销非常大
+	部分复制：同步部分数据，发生网络抖动时，可以减少同步数据数量
+		psync {offset} {runid}:同步某 偏移量 runid下数据
+		优势：复制过程开销较小
+	故障处理：
+	常见运维问题：
+		读写分离:复制数据延迟，读到过期数据，从节点故障
+		主从配置不一致:maxmemory不一致丢失数据，数据结构优化参数（hash-ziplist-entries）内存不一致
+		规避全量复制:第一次复制（不可避免）【小主节点，低峰】，
+			  节点运行ID不匹配【主节点重启】，
+			  复制积压缓存不足【增大复制缓冲区rel_backlog_size,网络‘增强’】【网络中断，部分复制无法满足】
+		规避复制风暴:单主节点重启或宕机，所有从节点都全量复制
+
+七、Redis Sentinel（Redis哨兵模式）:高可用架构， ‘新’客户端，基本原理
+	基本原理：
+	     哨兵(sentinel) 是一个分布式系统,你可以在一个架构中运行多个哨兵(sentinel) 进程,这些进程使用流言协议(gossipprotocols)
+		来接收关于Master是否下线的信息,并使用投票协议(agreement protocols)来决定是否执行自动故障迁移,以及选择哪个Slave作为新的Master。
+             每个哨兵(sentinel) 会向其它哨兵(sentinel)、master、slave定时发送消息,以确认对方是否”活”着,如果发现对方在指定时间(可配置)内未回应,
+		则暂时认为对方已挂(所谓的”主观认为宕机” Subjective Down,简称sdown).若“哨兵群”中的多数sentinel,都报告某一master没响应,系统才
+		认为该master"彻底死亡"(即:客观上的真正down机,Objective Down,简称odown),通过一定的vote算法,从剩下的slave节点中,选一台提升为
+		master,然后自动修改相关配置。
+             虽然哨兵(sentinel) 释出为一个单独的可执行文件 redis-sentinel ,但实际上它只是一个运行在特殊模式下的 Redis 服务器，你可以在启动一个
+		普通 Redis 服务器时通过给定 --sentinel 选项来启动哨兵(sentinel)。
+             哨兵(sentinel) 的一些设计思路和zookeeper非常类似
+	安装与配置：
+		配置开启主从节点
+		配置开启sentinel监控主节点（sentinel是特殊的redis）
+		详细配置节点
+	Sentinel配置：
+		port 26379
+		daemonize yes
+		protected-mode no
+		logfile "26379.log"
+		dir "/home/xmy/redis-5.0.5/data"
+		sentinel monitor mymaster it01 7000 2:监控主节点名字 IP 端口 故障转移决策节点个数 >=2，
+		sentinel down-after-milliseconds mymaster 30000:30s ping 不通说明有问题
+		sentinel parallel-syncs mymaster 1:并发只能1
+		sentinel failover-timeout mymaster 180000:故障转移时间
+		sentinel deny-scripts-reconfig yes
+		
+	常用命令：
+		ps -ef |grep sentinel
+		cat sentinel.conf | grep -v "#" | grep -v "^$" > redis-sentinel-bak.conf:去掉#和空格的行
+		sed "s/26379/26381/g" redis-sentinel-26379.conf > redis-sentinel-26381.conf
+		scp redis-sentinel-26381.conf xmy@it03:/home/xmy/redis-5.0.5/config
+		redis-sentinel -p 26379：启动端口26379 redis sentinel
+		redis-cli -h it03 -p 26381 info：查看信息
+		sentinel failover <masterName>:(客户端状态)主节点下线命令：
+	主/客观下线
+		主：每个sentinel节点对redis节点失败的偏见
+		客：所有sentinel节点对redis节点失败达成共识（超过quorum个统一：（机器数[奇数]/2）+1）		
+		
+	领导者选举
+		sentinel is-master-down-by-addr:命令希望成为领导者
+		1.每个做主观下线的sentinel节点向其他sentinel节点发送命令，要求设置为领导者
+		2.收到命令的sentinel节点如果没有同意过其他的sentinel节点发送的命令，那么将同意该请求，否则拒绝
+		3.sentinel节点发现自己的票数已超过sentinel集合半数且超过quorum，那么它将成为领导者
+		4.如果出现多个领导者，等待一段时间重新选举（建议：为了加快选举，建议选举期间机器数为奇数）
+	Redis故障转移原理：
+		三个定时任务：每10s每个sentinel对master和slave执行info
+				发现slave节点
+				确认主从关系
+			   每2s每个sentinel通过master节点的channel交换信息（pub/sub)
+				通过__sentinel__:hello频道交互
+				交互对节点的看法和自身信息
+			   每1s每个sentinel对其他sentinel和redis执行ping
+		合适的slave节点：	1.选择配置优先级的slave节点（配置高的机器）
+				2.选择偏移量最大的slave节点（偏移量大的与master数据一致性更高）
+				3.选择runid最小的节点 -结束
+	客户端高可用：JedisSentinelPool客户端
+	Sentinel开发运维问题：
+		节点运维：
+			机器下线
+				主节点下线命令：sentinel failover <masterName>
+			节点上线：
+				主节点上线：sentinel failover 进行替换
+				从节点：slaveof 即可，sentinel节点可以感知
+				sentinel节点：参考其他sentinel节点启动即可
+					
+		高可用读写分配：服务端，客户端
+			JedisSentinelPool客户端实现 了sentinel的高可用，但是没有实现slave的高可用
+			问题：Sentinel节点只对master节点做故障转移，对slave节点做下线判断，
+			     但故障slave节点上的client并没有处理
+			
+	Sentinel总结：	1.故障发现，故障自动转移，配置中心（redis-sentinel），客户端通知
+			2.Redis Sentinel在Redis2.8版本开始才正式生产可用，之前版本生产不可用
+			3.Redis Sentinel中Sentinel节点个数应该为大于等于3，且最好是奇数。
+			4.Redis Sentinel中的数据节点与普通数据节点没有区别
+			5.客户端初始化时连接的是Sentinel节点集合，不再是具体的Redis节点，但Sentinel只是配置中心不是代理。
+			6.Redis Sentinel通过三个定时任务实现了Sentinel节点对于主节点，从节点，其余Sentinel节点的监控。
+			7.Redis Sentinel在对节点做失败判定时分为主观和客观下线
+			8.看懂Redis Sentinel故障转移日志对于Redis Sentinel以及问题排查非常有帮助
+			9.Redis Sentinel实现读写分离高可用可依赖Sentinel节点的消息通知，
+			  获取Redis数据节点（slave）的状态变化，但实现需要单独开发客户端，难度大
+			问题：可扩展性差，伸缩性低，性能扩展差，容量扩容差
+
+八、Redis Cluster（Redis集群模式）:数据分布，架构，安装部署，扩容，客户端，常见问题
+	呼叫集群
+	数据分布
+		节点取余（不推荐）：
+		一致性哈希：MemoryCache 使用
+		虚拟槽分区：redis cluster使用。0-16383槽
+			 预设虚拟槽：每个槽映射一个数据子集，一般比节点数大
+			 良好的哈希函数：例如CRC16
+			 服务端管理节点，槽，数据：例如Redis Cluster
+	基本架构：复制，高可用，分片
+		节点：
+		meet：节点通信基础
+		指派槽：节点被指派槽后，才可正常读写
+		复制：内部监控没依赖sentinel
+	安装部署
+	常用命令
+		ps -ef | grep redis：
+		sed "s/8000/8006/g" redis-8000.conf > redis-8006.conf
+		redis-server redis-5.0.5/config/redis-8000.conf :启动所有节点(6个)
+		redis-cli -p 8000 cluster nodes：查看集群节点间状态
+		redis-cli -p 8000 cluster info：查看集群详情
+		redis-cli -p 8000 cluster slots：查看集群槽分配信息
+		redis-cli -p 8000 cluster meet 192.168.1.130 8001(it02 不识别）：握手节点互识
+		redis-cli -p 8000 cluster addslots 0:分配槽（推荐写脚本）:
+			start=$1
+			end=$2
+			ip=$3
+			port=$4
+			for slot in `seq ${start} ${end}`
+			do
+        			echo "slot:${slot}"
+        			redis-cli -h ${ip} -p ${port} cluster addslots ${slot}
+			done
+		sh addslot.sh 0 5461 it01 8000 (it04_8003)：执行0-5461槽分配给it01
+
+		sh addslot.sh 5462 10922 it02 8001(it05_8004)
+		sh addslot.sh 10923 16383 it03 8002(it06_8005)
+		redis-cli -h it04 -p 8003 cluster replicate 6840350ce9a45b252ebaf8aa106a0ee2e583b197（it01)
+			: it04:8003成为6840350ce9a45b252ebaf8aa106a0ee2e583b197（it01）的从节点（slave）
+		
+		redis-cli -h it05 -p 8004 cluster replicate e68b43b72855ebc17814d335a4cfdfddb4302e10
+		redis-cli -h it06 -p 8005 cluster replicate d474efb405954ef27d9a92674239264bece0c60e
+		redis-cli -c -h it01 -p 8000:集群模式下登录
+		注意：生产环境不会用这复杂的命令安装		
+
+	官方redis-cli —-cluster常用命令(redis 5.0版本以后 )
+		参考链接：https://www.cnblogs.com/aquester/p/9891465.html
+		redis-server redis-5.0.5/config/redis-8000.conf :启动所有节点(6个)
+		redis-cli --cluster create 192.168.1.129:8000 192.168.1.130:8001 192.168.1.131:8002 
+			192.168.1.132:8003 192.168.1.133:8004 192.168.1.134:8005 --cluster-replicas 1
+		
+		redis-cli --cluster check 192.168.1.129:8000：检查节点状态
+
+		redis-cli --cluster info it01:8000 ： 查看集群信息
+
+		redis-cli -c -h it01 -p 8000:以集群模式启动客户端
+
+		redis-cli --cluster add-node 192.168.1.134:8005 192.168.1.129:8000
+							:192.168.1.134:8005是新节点（必须没有槽）
+
+		redis-cli --cluster add-node 192.168.1.133:8004 192.168.1.129:8000 --cluster-slave
+							：192.168.1.133:8004是新从（slave）节点（必须没有槽）
+
+		redis-cli --cluster add-node 127.0.0.1:7006 127.0.0.1:7000 
+		--cluster-slave --cluster-master-id 3c3a0c74aae0b56170ccb03a76b60cfe7dc1912e
+			:“192.168.0.251:6390”为新添加的从节点，“192.168.0.251:6381”可为集群中已有的任意节点，
+			这种方法随机为6390指定一个master，如果想明确指定master，假设目标master的ID
+			为“3c3a0c74aae0b56170ccb03a76b60cfe7dc1912e”.
+
+		redis-cli --cluster del-node 192.168.1.134:8005 c93679dfe66f104828d2196a94def55b9ea2de69
+		注意：	“127.0.0.1:8000”为集群中任意一个非待删除节点，“node-id”为待删除节点的ID。
+			如果待删除的是master节点，则在删除之前需要将该master负责的slots先全部迁到其它master。
+		
+		槽分配命令：[0-5461 5462-10922 10923-16383]
+		1.cluster setslot {slot} importing {sourceNodeId}:让目标节点准备导入槽的数据
+		2.cluster setslot {slot} migrating {targetNodeId}:让源节点准备迁出槽的数据
+		3.cluster getkeysinslot {slot}{count}:每次获取count个属于槽的键
+		4.migrate {targetIp}{targetPort} key 0 {timeout}:命令把指定key迁移
+		5.重复 3-4步骤
+		6.cluster setslot {slot} node {targetNodeId}:通知槽分配给目标节点
+		例子：把7000节点的10个slots移到7001节点上，键入命令如下:
+		redis-cli –cluster reshard 127.0.0.1:7000
+			  –cluster-from a7b511330bffe28357cd21d6ee543e59f0a38dea 
+			  –cluster-to a7ab1aa24c9030d1fb42bbac3ad72c15bf683ef4 
+			  –cluster-slots 10 
+			  –cluster-yes
+		
+redis-cli --cluster reshard 192.168.1.129:8000 --cluster-from d474efb405954ef27d9a92674239264bece0c60e --cluster-to abe85f577d78ca022de501f288a1cb34f788f31f --cluster-slots 5460 --cluster-yes
+---------------------------------------------------------------------------------------------------------------------
+    redis-cli --cluster help：Cluster Manager Commands:
+              create         host1:port1 ... hostN:portN
+                             --cluster-replicas <arg>
+              check          host:port
+                             --cluster-search-multiple-owners
+              info           host:port
+              fix            host:port
+                             --cluster-search-multiple-owners
+              reshard        host:port
+                             --cluster-from <arg>
+                             --cluster-to <arg>
+                             --cluster-slots <arg>
+                             --cluster-yes
+                             --cluster-timeout <arg>
+                             --cluster-pipeline <arg>
+                             --cluster-replace
+              rebalance      host:port
+                             --cluster-weight <node1=w1...nodeN=wN>
+                             --cluster-use-empty-masters
+                             --cluster-timeout <arg>
+                             --cluster-simulate
+                             --cluster-pipeline <arg>
+                             --cluster-threshold <arg>
+                             --cluster-replace
+              add-node       new_host:new_port existing_host:existing_port
+                             --cluster-slave
+                             --cluster-master-id <arg>
+              del-node       host:port node_id
+              call           host:port command arg arg .. arg
+              set-timeout    host:port milliseconds
+              import         host:port
+                             --cluster-from <arg>
+                             --cluster-copy
+                             --cluster-replace
+              help
+---------------------------------------------------------------------------------------------------------------------		客户端使用
+		moved异常
+		ask重定向
+	故障转移
+		通过ping/pong消息实现故障发现
+		主观下线：某节点认为另一节点不可用，偏见
+		客观下线：半数以上持有槽的主节点都标记某节点主观下线，认为该节点下线，即触发故障转移
+	故障恢复
+		资格检查,准备选举时间,选举投票,替换主节点
+	Redis Cluster 常见问题
+	集群完整性
+		cluster-require-full-coverage 默认yes（建议设no），大部分业务无法容忍宕机一台机器集群无法使用，
+	带宽消耗
+		消息发送频率：cluster-node-timeout/2 是会直接发送ping消息
+		消息数据量：
+		节点部署的机器规模：
+		优化：避免使用大集群，大业务可以多集群
+		 	cluster-node-timeout：带宽和故障转移速度的均衡
+			均匀分配多机器
+	Pub/Sub广播（发布订阅）
+		问题：publish在集群每个节点广播：加重带宽
+		解决：单独走一条redis sentinel	
+	集群倾斜
+		数据倾斜
+			节点和槽分配不均：
+				redis-cli --cluster info 192.168.1.129:8000 命令： 查看节点信息，
+				redis-cli --cluster rebalance 192.168.1.129:8000：命令进行均衡
+				（谨慎使用rebalance:槽迁移涉及到客户端访问槽数据问题，随智能客户端能感知到，但仍需谨慎使用）
+	
+			不同槽对应键值数量差异较大：CRC16正常情况下比较均匀，可能存在hash_tag,cluster countkeysinslot {slot}
+						获取槽对应键值个数
+			包含bigkey：key本身数据量大，例如大字符串，几百万的元素hash，set等 redis-cli —-bigkeys，优化数据结构
+			内存相关配置不一致：hash zset 有优化，但没有在所有节点都做优化，导致不一致
+		请求倾斜
+			热点key：重要的key或者bigkey
+				优化：避免bigkey，热键不要用hash_tag,当一致性不高时，可用本地缓存+MQ
+	读写分离
+		只读连接：集群模式的从节点不接受任何读写请求
+			重定向到负责槽的主节点
+			readonly命令可以从节点读：连接级别命令
+ 				例如：redis-cli -h 192.168.1.134 -p 8005 -c
+					-> readonly (指定只读)
+					-> get hello
+					
+		读写分离：集群更复杂（不推荐）,节点和槽关系复杂
+			同样的问题：复制延迟，读取过期数据，从节点故障
+			修改客户端：cluster slaves {nodeId}
+			
+	数据迁移
+		官方迁移工具（不支持在线）：8000数据复制到7000上
+		redis-cli --cluster import host:port --cluster-from --cluster-copy --cluster-replace
+		例如：redis-cli --cluster import 192.168.1.129:8000 
+					--cluster-from 192.168.1.129:8000
+			 		--cluster-copy 192.168.1.129:7000
+		第三方迁移工具（在线迁移）
+	集群局限性
+		key批量操作支持有限：例如mget，mset必须在一个slot（槽）
+		key事务和Lua支持有限：操作的key必须在一个节点
+		key是数据分区的最小粒度：不支持bigkey分区
+		不支持多个数据库：集群模式下只有一个db0
+		复制只支持一层：不支持树形复制结构
+
+	Redis Cluster 存在问题：
+		Redis Cluster：满足容量和性能的扩展性，很多业务“不需要” QPS达不到要求
+			大多数时客户端性能会“降低”
+			命令无法跨节点使用：mget，keys，scan，flush，sinter等
+			Lua和事务无法跨节点使用
+		很多场景Redis Sentinel已经够用：可达万级别QPS
+	Redis Cluster总结：
+		数据分区：采用虚拟槽方式（16384个槽），每各节点负责一部分，实现均衡
+		集群搭建：准备节点，节点握手，分配槽，复制
+		集群伸缩：扩容：迁移槽到新节点
+	 		收缩：迁移槽至其他节点，忘记节点，下线
+		smart客户端：操作集群达到通信效率最大化，客户端内部负责维护键 ->槽->节点映射
+		故障转移：主客观下线，主观下线数过半标记位客观下线，从节点对客观下线主节点触发故障恢复流程
+		集群问题：带宽，广播问题，倾斜，集单对比
+	
+	Redis Cluster 上线新节点流程：
+		1.(新节点)
+		删除节点集群记录： rm ./redis-5.0.5/data/nodes-8000.conf
+		删除节点rdb文件： rm ./redis-5.0.5/data/dump-8000.rdb
+		删除节点aof文件： rm ./redis-5.0.5/data/appendonly-8000.aof
+
+		2.
+		启动redis: redis-server redis-5.0.5/config/redis-8000.conf
+		
+		3(首次).
+		创建节点：
+		redis-cli --cluster create 192.168.1.129:8000 192.168.1.130:8001 192.168.1.131:8002 
+			192.168.1.132:8003 192.168.1.133:8004 192.168.1.134:8005 --cluster-replicas 1
+		4(首次).
+
+		3(新节点).
+		添加节点：redis-cli --cluster add-node 192.168.1.129:8000 192.168.1.129:8006
+		4(新节点).
+		确定主从关系:redis-cli -h 192.168.1.132 -p 8003 cluster replicate 
+					333d5787d2f334321e432e93a327f1ff920b5331
+		5.
+		分配槽 redis-cli --cluster reshard 192.168.1.129:8000 
+				--cluster-from abe85f577d78ca022de501f288a1cb34f788f31f 
+				--cluster-to 5aaaf2050d97d33d506639913ce9d82feb57885b 
+				--cluster-slots 5461 --cluster-yes
+	Redis Cluster 下线新节点流程：
+		1.
+		槽迁移(如果有)：
+		2.
+		主节点迁移（如果有）：
+		3.
+		下线节点：
+		
+	Redis Cluster 主节点切换流程：
+		1.删除主节点：redis-cli --cluster del-node host:port node_id
+		redis-cli --cluster del-node 192.168.1.129:8000 abe85f577d78ca022de501f288a1cb34f788f31f
+	Redis Cluster 数据迁移流程：
+		1.
+九、Redis缓存设计与优化:粒度，更新策略，无底洞问题，穿透，雪崩，热点Key（击穿）。
+	受益与成本
+	缓存更新策略
+	缓存粒度控制
+		通用性：全量属性更好
+		占用空间：部分属性更好
+		代码维护：表面上全量属性更好
+	穿透：不存在key（越界key)，
+		解决：缓存短时空对象:如果一个查询返回的数据为空，不管是数据不存在还是系统故障，我们仍然把这个结果进行缓存，但是它的过期时间会很短
+		   		最长不超过5分钟
+		     布隆过滤器拦截:将所有可能存在的数据哈希到一个足够大的bitmap中，一个一定不存在的数据会被这个bitmap拦截掉,
+				从避免了对底层存储系统的查询压力
+	雪崩：大量过期key，客户端直接请求到数据库里面。数据库负载非常高。甚至数据库拖挂了
+		解决：
+	       （1）设置redis集群和DB集群的高可用，如果redis出现宕机情况，可以立即由别的机器顶替上来。这样可以防止一部分的风险。
+	       （2）使用互斥锁(不能根本解决问题)
+			在缓存失效后，通过加锁或者队列来控制读和写数据库的线程数量。比如：对某个key只允许一个线程查询数据和写缓存，其他线程等待。
+			单机的话，可以使用synchronized或者lock来解决，如果是分布式环境，可以是用redis的setnx命令来解决。
+		(3)不同的key,可以设置不同的过期时间，让缓存失效的时间点不一致，尽量达到平均分布.
+		(4)redis中设置永久不过期，这样就保证了，不会出现热点问题，也就是物理上不过期
+		(5)资源保护,使用netflix的hystrix，可以做各种资源的线程池隔离，从而保护主线程池
+	无底洞问题：加节点不能提高性能，反而下降
+		解决：减少网络通信次数
+		     降低接入成本：客户端长连接/连接池、NIO等
+	热点Key（击穿）：热点key失效，重建缓存巨增， 
+		解决：互斥锁（不能根本解决问题），永不过期（不能根本解决问题）,
+		     热点key水平拆分法
+十、CacheCloud（Redis云平台):https://github.com/sohutv/cachecloud	
