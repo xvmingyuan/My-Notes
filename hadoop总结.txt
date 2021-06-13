@@ -1,0 +1,98 @@
+------------Hadoop集群相关概念————————————
+Hadoop(分布式文件存储系统):为解决分布式模式下文件存储和读取产生了—>HDFS文件系统
+
+  ***注***: Hadoop基于RPC远程通信
+  RPC通信:远程过程调用,它是一种通过网络从远程计算机程序上请求服务，而不需要了解底层网络技术的协议
+
+  Hadoop RPC通信底层设计原理说明:
+		0.Client与Service指定协议接口
+		1.Client构造一个泛型接口代理,接口携带必要的信息(如IP,Port,类指向信息等),
+		2.Client将代理接口序列化成数据,发送出去
+		3.Client通过Socket通信将序列化后数据发送给Service
+		4.Service通过Socket接收到Client数据反序列化出泛型接口
+		5.Service根据协议使用动态代理实例化接口对象,并执行对象操作
+		6.Service执行完毕,将信息返还给Client.(此时双方角色调换完成信息返还)
+  HDFS(非HA):核心为NameNode,DataNode,SecondaryNameNode
+	DataNode:它是提供分布式存储服务,将客户端上传的文件,以块(Block)的形式,分散的存储在集群的某些台机器上面
+	NameNode:用来与客户端交流,保存客户端存储的文件路径(edits,fsimsge),保存文件路径与DataNode的数据块映射		关系,并监听DataNode集群
+   	SecondaryNameNode(非HA):监听NameNode,维护NameNode在存储文件关系映射(edits, fsimages)的内存,文		件存储,CPU等调度问题.
+
+  HDFS(HA):核心为NameNode, DataNode, JournalNode, DFSZKFailoverController, Zookeeper
+	JournalNode:NameNode之间共享数据信息(edits内存文件)的管理节点,依赖于zookeeper
+	DFSZKFailoverController(zkfc):NameNode健康监视器,整体的故障转移控制的守护进程,由zookeeper管理
+	Zookeeper(HDFS资源管理系统):主要解决NameNode瓶颈,以及多个NameNode协调,资源共享问题.
+
+  MapReduce(Yarn-离线式分布式计算系统):
+	ResourceManager:分布式计算管理节点,Yarn所有资源的统一管理和分配,接收来自各个节点（NodeManager）		的资源汇报信息，并把这些信息按照一定的策略分配给各个应用程序（实际上是ApplicationManager）
+	NodeManager: NM是ResourceManager在每台机器上的代理，负责容器管理，并监控它们的资源使用情况，以及		向ResourceManager/Scheduler提供资源使用报告
+
+Zookeeper(CP):功能包括：配置维护、域名服务、分布式同步、分布式锁、组服务、负载均衡、选举、数据的发布和订阅等
+  关键词:Paxos一致性算法,CAP理论,实现分布式一致性原理:文件状态变化监听
+  原生API:
+  ZkClient:工具
+  Curator:工具
+
+Eureka(AP): Eureka是一个基于REST(Representational State Transfer)的服务，主要用于AWS cloud， 提供服务定位(locating services)、负载均衡(load balancing)、故障转移(failover of middle-tier servers)。我们把它叫做Eureka Server. Eureka也提供了基于Java的客户端组件，Eureka Client,内置的负载均衡器可以实现基本的round-robin负载均衡能力。在Netflix，一个基于Eureka的更复杂的负载均衡器针对多种因素(如流量、资源利用率、错误状态等)提供加权负载均衡，以实现高可用(superior resiliency).
+
+HBase:是一个分布式的、面向列的开源数据库,一个结构化数据的分布式存储系统
+
+Avro(数据序列化系统):解决NameNode,DataNode内部RPC通信缓慢{Hadoop现存的RPC系统遇到一些问题，如性能瓶颈(当前采用IPC系统，它使用Java自带的DataOutputStream和DataInputStream)；需要服务器端和客户端必须运行相同版本的Hadoop；只能使用Java开发等。但现存的这些序列化系统自身也有毛病，以Protocol Buffers为例，它需要用户先定义数据结构，然后根据这个数据结构生成代码，再组装数据。如果需要操作多个数据源的数据集,那么需要定义多套数据结构并重复执行多次上面的流程，这样就不能对任意数据集做统一处理。其次，对于Hadoop中Hive和Pig这样的脚本系统来说，使用代码生成是不合理的。并且ProtocolBuffers在序列化时考虑到数据定义	与数据可能不完全匹配，在数据中添加注解，这会让数据变得庞大并拖慢处理速度。其它序列化系统有如ProtocolBuffers类似的问题},而引起数据传输,数据处理效率低问题.
+
+Hive:RDS(Relational Database Service)SQL翻译成HDFS MR等操作的工具
+	
+
+Storm:分布式实时计算,实时处理系统
+	
+
+Kafka(分布式消息队列):高吞吐量的分布式发布订阅消息系统
+	
+
+Spark(实时计算):基于内存的分布式计算系统
+
+Redis:是一个开源的使用ANSI C语言编写、支持网络、可基于内存亦可持久化的日志型、Key-Value数据库，并提供多种语言的API
+
+Netty(基于NIO实现):Netty是由JBOSS提供的一个java开源框架。Netty提供异步的、事件驱动的网络应用程序框架和工具，用以快速开发高性能、高可靠性的网络服务器和客户端程序 —>https://www.jianshu.com/p/5ad87d124f2b
+
+Mina(基于NIO实现):Apache Mina Server 是一个网络通信应用框架，也就是说，它主要是对基于TCP/IP、UDP/IP协议栈的通信框架（当然，也可以提供JAVA 对象的序列化服务、虚拟机管道通信服务等），Mina 可以帮助我们快速开发高性能、高扩展性的网络通信应用 —>https://www.jianshu.com/p/5ad87d124f2
+
+
+
+
+
+------------Hadoop集群相关各机器进程说明————————————
+机器l1,l2,l3部署节点:
+	DataNode(HDFS数据文件管理节点,依赖于NameNode)
+	JournalNode(NameNode之间共享数据信息(edits内存文件)的管理节点,依赖于zookeeper)
+	NodeManager(Yarn的离线计算处理管理节点,依赖于zookeeper)
+	QuorumPeerMain(Zookeeper主程序,hadoop-ha,Yarn,zookeeper管理节点,hbase)
+	HRegionServer(HBase的数据存储服务节点,依赖于zookeeper)
+	Supervisor(Storm实时计算处理节点,依赖于zookeeper)
+	Kafka(Kafka分布式消息队列)
+机器l4部署节点:
+	ResourceManager(Yarn分布式计算系统管理者-主节点)(start-yarn.sh)
+	HMaster(HBase数据库管理者-主节点)(start-hbase.sh)
+机器l5部署节点:
+	ResourceManager(Yarn分布式计算系统管理者-从节点)
+	Hamster(HBase数据库管理者-从节点)
+机器l6部署节点:
+	NameNode(HDFS分布式文件系统管理者-从节点)
+	DFSZKFailoverController[ZKFC](NameNode健康监视器,整体的故障转移控制的守护进程,由zookeeper管理)
+机器l7部署节点:
+	NameNode(HDFS分布式文件系统管理者-主节点)(start-dfs.sh)
+	DFSZKFailoverController[ZKFC](NameNode健康监视器,整体的故障转移控制的守护进程,由zookeeper管理)
+	Hive(RDS翻译成hdfs操作的工具)
+	Nimbus(storm实时计算管理节点,管理supervisor)
+————-------——Hadoop集群相关命令操作——————————————
+命令行操作:
+	./zookeeper-3.4.5/bin/zkServer.sh start
+	./hadoop-2.4.1/sbin/hadoop-daemon.sh start journalnode
+	./yarn-daemon.sh start resourcemanager
+	/usr/hadoop/hadoop-2.4.1/sbin/stop-yarn.sh
+
+集群启动命令行操作:
+	/usr/hadoop/zookeeper-3.4.5/bin/zkServer.sh start
+	/usr/hadoop/hadoop-2.4.1/sbin/start-dfs.sh
+	/usr/hadoop/hadoop-2.4.1/sbin/start-yarn.sh
+	/usr/hadoop/hadoop-2.4.1/sbin/yarn-daemon.sh start resourcemanager
+	/usr/hadoop/hbase-0.96/bin/start-hbase.sh
+	/usr/hadoop/hbase-0.96/bin/hbase-daemon.sh start master
